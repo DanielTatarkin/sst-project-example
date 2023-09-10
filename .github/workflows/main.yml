@@ -1,0 +1,54 @@
+on:
+  push:
+    branches:
+      - main
+
+env:
+  AWS_REGION: "us-east-1"
+  AWS_IAM_ROLE_GITHUB_ACTIONS: <arn:aws:iam::123456789012:role/ROLE_NAME> # replace
+  NODE_VERSION: 18
+
+permissions:
+  id-token: write # This is required for requesting the JWT
+  contents: read # This is required for actions/checkout
+
+jobs:
+  deploy_sst_project:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: List files in the repository
+        run: |
+          ls ${{ github.workspace }}
+
+      ### PNPM setup
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+      - name: Use Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+      - name: Install dependencies
+        run: pnpm install -r
+      ### END PNPM setup ###
+
+      ### AWS Creds
+      - name: "Configure AWS Credentials"
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.AWS_IAM_ROLE_GITHUB_ACTIONS }}
+          role-session-name: GitHub_to_AWS_via_FederatedOIDC
+      - name: Run AWS STS GetCallerIdentity
+        run: |
+          aws sts get-caller-identity
+      ### END AWS Creds ###
+      ### SST Deploy Prod
+      - name: "SST Deploy"
+        run: pnpm run deploy-prod
+      ### END SST Deploy Prod ###
+
+      - run: echo "🍏 This job's status is ${{ job.status }}."
